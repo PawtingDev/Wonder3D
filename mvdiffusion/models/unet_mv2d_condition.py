@@ -228,6 +228,7 @@ class UNetMV2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixi
         mid_block_only_cross_attention: Optional[bool] = None,
         cross_attention_norm: Optional[str] = None,
         addition_embed_type_num_heads=64,
+        # for multiview
         num_views: int = 1,
         cd_attention_last: bool = False,
         cd_attention_mid: bool = False,
@@ -482,6 +483,7 @@ class UNetMV2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixi
                 resnet_out_scale_factor=resnet_out_scale_factor,
                 cross_attention_norm=cross_attention_norm,
                 attention_head_dim=attention_head_dim[i] if attention_head_dim[i] is not None else output_channel,
+                # for multiview
                 num_views=num_views,
                 cd_attention_last=cd_attention_last,
                 cd_attention_mid=cd_attention_mid,
@@ -959,6 +961,7 @@ class UNetMV2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixi
                 )
             image_embeds = added_cond_kwargs.get("image_embeds")
             encoder_hidden_states = self.encoder_hid_proj(image_embeds)
+
         # 2. pre-process
         sample = self.conv_in(sample)
 
@@ -1359,9 +1362,9 @@ class UNetMV2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixi
                 if out_channels == 8: # copy for the last 4 channels
                     model.conv_out.weight.data[:, 4:] = conv_out_weight
             
-            if zero_init_camera_projection:
-                for p in model.class_embedding.parameters():
-                    torch.nn.init.zeros_(p)
+            # if zero_init_camera_projection:
+            #     for p in model.class_embedding.parameters():
+            #         torch.nn.init.zeros_(p)
 
             loading_info = {
                 "missing_keys": missing_keys,

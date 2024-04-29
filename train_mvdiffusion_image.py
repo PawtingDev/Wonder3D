@@ -41,7 +41,8 @@ from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 from mvdiffusion.models.unet_mv2d_condition import UNetMV2DConditionModel
 
 # from mvdiffusion.data.dataset_nc import MVDiffusionDatasetV2 as MVDiffusionDataset
-from mvdiffusion.data.objaverse_dataset import ObjaverseDataset as MVDiffusionDataset
+# from mvdiffusion.data.objaverse_dataset import ObjaverseDataset as MVDiffusionDataset
+from mvdiffusion.data.thuman_dataset import ObjaverseDataset as MVDiffusionDataset
 
 from mvdiffusion.pipelines.pipeline_mvdiffusion_image import MVDiffusionImagePipeline
 

@@ -1,8 +1,10 @@
 
 blenderproc==2.5.0
+progressbar==2.5
+h5py==3.8.0
+
 boto3==1.26.105
 docstring-parser==0.14.1
-h5py==3.8.0
 imageio==2.9.0
 imageio-ffmpeg==0.4.2
 markdown==3.4.3
@@ -13,7 +15,6 @@ omegaconf==2.1.1
 opencv-python==4.5.5.64
 opencv-python-headless==4.7.0.72
 pillow==9.4.0
-progressbar==2.5
 scikit-image==0.20.0
 termcolor==2.2.0
 tqdm==4.65.0

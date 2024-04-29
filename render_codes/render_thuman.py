@@ -1,4 +1,5 @@
 import blenderproc as bproc
+import pickle
 
 import argparse, sys, os, math, re
 import bpy
@@ -8,52 +9,30 @@ import matplotlib
 from blenderproc.python.postprocessing import PostProcessingUtility
 
 from mathutils import Vector, Matrix
-import random
-import sys
 import time
 import urllib.request
-import uuid
-from typing import Tuple
 import numpy as np
 from blenderproc.python.types.MeshObjectUtility import MeshObject, convert_to_meshes
-import pdb
 
-from math import radians
 import cv2
-from scipy.spatial.transform import Rotation as R
 import PIL.Image as Image
 
+# import pydevd_pycharm
+# pydevd_pycharm.settrace('localhost', port=12345, stdoutToServer=True, stderrToServer=True)
+
 parser = argparse.ArgumentParser(description='Renders given obj file by rotation a camera around it.')
-parser.add_argument('--view', type=int, default=0,
-                    help='the index of view to be rendered')
+parser.add_argument('--view', type=int, default=0, help='the index of view to be rendered')
 parser.add_argument(
-    "--object_path",
-    type=str,
-    default='/ghome/l5/xxlong/.objaverse/hf-objaverse-v1/glbs/000-148/2651a32fb4dc441dab773b8b534b851f.glb',
-    required=True,
-    help="Path to the object file",
+    "--object_path", type=str,
+    default='/media/pawting/SN640/Datasets/THuman2/scans/0000/0000.obj',
+    required=True, help="Path to the object file",
 )
-parser.add_argument('--output_folder', type=str, default='output',
-                    help='The path the output will be dumped to.')
-# parser.add_argument('--scale', type=float, default=1,
-#                     help='Scaling factor applied to model. Depends on size of mesh.')
-# parser.add_argument('--depth_scale', type=float, default=0.1,
-#                     help='Scaling that is applied to depth. Depends on size of mesh. Try out various values until you get a good result. Ignored if format is OPEN_EXR.')
-# parser.add_argument('--format', type=str, default='PNG',
-#                     help='Format of files generated. Either PNG or OPEN_EXR')
-parser.add_argument('--resolution', type=int, default=512,
-                    help='Resolution of the images.')
-parser.add_argument('--ortho_scale', type=float, default=1.25,
-                    help='ortho rendering usage; how large the object is')
-parser.add_argument('--object_uid', type=str, default=None)
+parser.add_argument('--output_folder', type=str, default='output', help='The path the output will be dumped to.')
+parser.add_argument('--resolution', type=int, default=512, help='Resolution of the images.')
+parser.add_argument('--ortho_scale', type=float, default=1.25, help='ortho rendering usage; how large the object is')
+parser.add_argument('--random_pose', action='store_true', help='whether randomly rotate the poses to be rendered')
+parser.add_argument('--reset_object_euler', action='store_true', help='set object rotation euler to 0')
 
-parser.add_argument('--random_pose', action='store_true',
-                    help='whether randomly rotate the poses to be rendered')
-
-parser.add_argument('--reset_object_euler', action='store_true',
-                    help='set object rotation euler to 0')
-
-# argv = sys.argv[sys.argv.index("--") + 1:]
 args = parser.parse_args()
 
 
@@ -123,7 +102,7 @@ def get_3x4_RT_matrix_from_blender(cam):
     #     (0, 1, 0),
     #     (0, 0, 1)))
 
-    # Transpose since the rotation is object rotation, 
+    # Transpose since the rotation is object rotation,
     # and we want coordinate rotation
     # R_world2bcam = cam.rotation_euler.to_matrix().transposed()
     # T_world2bcam = -1*R_world2bcam @ location
@@ -134,7 +113,7 @@ def get_3x4_RT_matrix_from_blender(cam):
 
     # Convert camera location to translation vector used in coordinate changes
     # T_world2bcam = -1*R_world2bcam @ cam.location
-    # Use location from matrix_world to account for constraints:     
+    # Use location from matrix_world to account for constraints:
     T_world2bcam = -1 * R_world2bcam @ location
 
     # # Build the coordinate transform matrix from world to computer vision camera
@@ -177,12 +156,12 @@ def get_calibration_matrix_K_from_blender(mode='simple'):
         pixel_aspect_ratio = scene.render.pixel_aspect_x / scene.render.pixel_aspect_y
 
         if (camdata.sensor_fit == 'VERTICAL'):
-            # the sensor height is fixed (sensor fit is horizontal), 
+            # the sensor height is fixed (sensor fit is horizontal),
             # the sensor width is effectively changed with the pixel aspect ratio
             s_u = width / sensor_width / pixel_aspect_ratio
             s_v = height / sensor_height
         else:  # 'HORIZONTAL' and 'AUTO'
-            # the sensor width is fixed (sensor fit is horizontal), 
+            # the sensor width is fixed (sensor fit is horizontal),
             # the sensor height is effectively changed with the pixel aspect ratio
             pixel_aspect_ratio = scene.render.pixel_aspect_x / scene.render.pixel_aspect_y
             s_u = width / sensor_width
@@ -212,7 +191,11 @@ def load_object(object_path: str) -> None:
     elif object_path.endswith(".fbx"):
         bpy.ops.import_scene.fbx(filepath=object_path)
     elif object_path.endswith(".obj"):
-        bpy.ops.import_scene.obj(filepath=object_path)
+        # bpy.ops.import_scene.obj(filepath=object_path, use_smooth_groups=False, use_split_objects=False,
+        #                       use_split_groups=False, use_groups_as_vgroups=False, use_image_search=False,
+        #                       split_mode='OFF', global_clamp_size=0.0, axis_forward='-Z', axis_up='Y')
+        # bproc.loader.load_obj(filepath=object_path)
+        bpy.ops.wm.obj_import(filepath=object_path)
     elif object_path.endswith(".ply"):
         bpy.ops.import_mesh.ply(filepath=object_path)
     else:
@@ -275,107 +258,131 @@ def chw2hwc(chw):
     if isinstance(chw, np.ndarray):
         hwc = np.moveaxis(chw, 0, -1)
     return hwc
-def add_lighting() -> None:
-    # add a new light
-    bpy.ops.object.light_add(type="AREA")
-    light2 = bpy.data.lights["Area"]
-    light2.energy = 70000
-    bpy.data.objects["Area"].location[2] = 0.5
-    bpy.data.objects["Area"].scale[0] = 100
-    bpy.data.objects["Area"].scale[1] = 100
-    bpy.data.objects["Area"].scale[2] = 100
+
+def dump_render_results(type, views, data, view_idx):
+    for j in range(len(views)):
+        index = j
+
+        view = f"{view_idx:03d}" + VIEWS[j]
+
+        # Nomralizes depth maps
+        depth_map = data['depth'][index]
+
+        # dis_map = data['distance'][index]
+        # print("dis_max", np.max(dis_map))
+        # mask
+        # valid_mask = dis_map != np.max(dis_map)
+        # invalid_mask = dis_map == np.max(dis_map)
+        # # dis -> depth
+        # depth_map = PostProcessingUtility.dist2depth(dis_map)
+        # depth_map = dis_map
+
+        depth_max = np.max(depth_map)
+        valid_mask = depth_map != depth_max
+        invalid_mask = depth_map == depth_max
+        far = np.max(depth_map[valid_mask])
+        depth_map[invalid_mask] = far  # far_bound
+        # depth_map = np.uint16((depth_map / 10) * 65535)
+        valid_mask = valid_mask.astype(np.int8) * 255
+
+        depth_max = np.max(depth_map)
+        depth_min = np.min(depth_map)
+
+        depth_map = (depth_map - depth_min) / (depth_max - depth_min)
+        # depth_map = (depth_map - 1.5) / (2.7 - 1.5)
+        depth_map.clip(0, 1)
+
+        # w&g depth
+        # depth_colored = colorize_depth_maps(
+        #     depth_map, 0, 1, cmap="Spectral"
+        # ).squeeze()
+        # depth_map = np.uint8(depth_colored * 255)
+        # depth_map = chw2hwc(depth_map)
+        # depth_map = np.concatenate([depth_map, valid_mask[:, :, None]], axis=-1)
+
+        # colored depth
+        depth_map = np.uint8(depth_map * 255)
+        depth_map = cv2.cvtColor(depth_map, cv2.COLOR_GRAY2RGB)
+        depth_map = np.concatenate([depth_map, valid_mask[:, :, None]], axis=-1)
+
+        normal_map = data['normals'][index] * 255
+
+        # color_map = data['colors'][index]
+        color_map = data['diffuse'][index]
+        color_map = np.concatenate([color_map, valid_mask[:, :, None]], axis=-1)
+
+        normal_map = np.concatenate([normal_map, valid_mask[:, :, None]], axis=-1)
+        if type == 'model':
+            dump_dir_model = os.path.join(args.output_folder, 'model')
+            os.makedirs(dump_dir_model, exist_ok=True)
+            Image.fromarray(color_map.astype(np.uint8)).save('{}/rgb_{}.png'.format(dump_dir_model, view))
+
+            Image.fromarray(normal_map.astype(np.uint8)).save('{}/normals_{}.png'.format(dump_dir_model, view))
+            cv2.imwrite('{}/mask_{}.png'.format(dump_dir_model, view), valid_mask)
+        elif type == 'smplx':
+            dump_dir_smplx = os.path.join(args.output_folder, 'smplx')
+            os.makedirs(dump_dir_smplx, exist_ok=True)
+            Image.fromarray(normal_map.astype(np.uint8)).save('{}/normals_{}.png'.format(dump_dir_smplx, view))
+            cv2.imwrite('{}/mask_{}.png'.format(dump_dir_smplx, view), valid_mask)
+        #
+        # Image.fromarray(depth_map.astype(np.uint8)).save('{}/depth_{}.png'.format(args.output_folder, view))
+        #
+        # # cv2.imwrite('{}/{}/rgb_{}.png'.format(args.output_folder, object_uid, view), color_map)
+        # # cv2.imwrite('{}/{}/depth_{}.png'.format(args.output_folder,object_uid, view), depth_map)
+        # # cv2.imwrite('{}/{}/normals_{}.png'.format(args.output_folder,object_uid, view), normal_map)
+        # cv2.imwrite('{}/mask_{}.png'.format(args.output_folder, view), valid_mask)
+
 
 bproc.init()
+# 1. Rotate scan using smplx to face forward
+lst_object_path = args.object_path.split('/')
+obj_id = lst_object_path[-2]
+base_dir = '/'.join(lst_object_path[:-3])
+# smplx_dir = 'smplx'
+smplx_dir = 'Smpl-X_THU'
 
-world_tree = bpy.context.scene.world.node_tree
-back_node = world_tree.nodes['Background']
-# env_light = 0.5
-env_light = 0.
-back_node.inputs['Color'].default_value = Vector([env_light, env_light, env_light, 1.0])
-# back_node.inputs['Strength'].default_value = 1.0  # 0.5
+smplx_path = os.path.join(base_dir, smplx_dir, obj_id, 'smplx_param.pkl')
+smplx_obj_file = os.path.join(base_dir, smplx_dir, obj_id, 'mesh_smplx.obj')
+# with open(smplx_path, 'rb') as f:
+#     smplx_para = np.load(f, allow_pickle=True)
+smplx_para = np.load(smplx_path, allow_pickle=True)
+
+y_orient = smplx_para['global_orient'][0][1]
+base_orient = (y_orient * 180.0 / np.pi)
+
 
 # Place camera
-
 bpy.data.cameras[0].type = "ORTHO"
 bpy.data.cameras[0].ortho_scale = args.ortho_scale
-# cam = bpy.context.scene.objects['Camera']
-# cam.data.type = "ORTHO"
-# cam.data.ortho_scale = args.ortho_scale
 print("ortho scale ", args.ortho_scale)
 
-# cam_constraint = cam.constraints.new(type='TRACK_TO')
-# cam_constraint.track_axis = 'TRACK_NEGATIVE_Z'
-# cam_constraint.up_axis = 'UP_Y'
+VIEWS = ["_front", "_back", "_right", "_left", "_front_right", "_front_left"]
 
 
-# # Make light just directional, disable shadows.
-# light = bproc.types.Light(name='Light', light_type='SUN')
-# light = bpy.data.lights['Light']
-# light.use_shadow = False
-# # Possibly disable specular shading:
-# light.specular_factor = 1.0
-# light.energy = 5.0
-
-# # Add another light source so stuff facing away from light is not completely dark
-# light2 = bproc.types.Light(name='Light2', light_type='SUN')
-# light2 = bpy.data.lights['Light2']
-# light2.use_shadow = False
-# light2.specular_factor = 1.0
-# light2.energy = 3  # 0.015
-# bpy.data.objects['Light2'].rotation_euler = bpy.data.objects['Light'].rotation_euler
-# bpy.data.objects['Light2'].rotation_euler[0] += 180
-
-# # Add another light source so stuff facing away from light is not completely dark
-# light3 = bproc.types.Light(name='light3', light_type='SUN')
-# light3 = bpy.data.lights['light3']
-# light3.use_shadow = False
-# light3.specular_factor = 1.0
-# light3.energy = 3  # 0.015
-# bpy.data.objects['light3'].rotation_euler = bpy.data.objects['Light'].rotation_euler
-# bpy.data.objects['light3'].rotation_euler[0] += 90
-
-# # Add another light source so stuff facing away from light is not completely dark
-# light4 = bproc.types.Light(name='light4', light_type='SUN')
-# light4 = bpy.data.lights['light4']
-# light4.use_shadow = False
-# light4.specular_factor = 1.0
-# light4.energy = 3  # 0.015
-# bpy.data.objects['light4'].rotation_euler = bpy.data.objects['Light'].rotation_euler
-# bpy.data.objects['light4'].rotation_euler[0] += -90
-
-
-# Get all camera objects in the scene
-def get_camera_objects():
-    cameras = [obj for obj in bpy.context.scene.objects if obj.type == 'CAMERA']
-    return cameras
-
-
-VIEWS = ["_front", "_back", "_right", "_left", "_front_right", "_front_left", "_back_right", "_back_left", "_top"]
-EXTRA_VIEWS = ["_front_right_top", "_front_left_top", "_back_right_top", "_back_left_top", ]
-
+# VIEWS = ["_front", "_back", "_right", "_left", "_front_right", "_front_left", "_back_right", "_back_left", "_top"]
+# EXTRA_VIEWS = ["_front_right_top", "_front_left_top", "_back_right_top", "_back_left_top", ]
 
 def save_images(object_file: str, viewidx: int) -> None:
     global VIEWS
-    global EXTRA_VIEWS
+    # global EXTRA_VIEWS
+    # 1. init scene
     reset_scene()
 
-    # load the object
+    # load the object to bpy
     load_object(object_file)
-    if args.object_uid is None:
-        object_uid = os.path.basename(object_file).split(".")[0]
-    else:
-        object_uid = args.object_uid
-    args.output_folder = os.path.join(args.output_folder, object_uid[:2])
-    os.makedirs(os.path.join(args.output_folder, object_uid), exist_ok=True)
+    load_object(smplx_obj_file)
+    # args.output_folder = os.path.join(args.output_folder, object_uid[:2])
+    os.makedirs(args.output_folder, exist_ok=True)
 
-    if args.reset_object_euler:
+    # if args.reset_object_euler:
+    if int(obj_id) > 525:
         for obj in scene_root_objects():
             obj.rotation_euler[0] = 0  # don't know why
         bpy.ops.object.select_all(action="DESELECT")
 
     scale, offset = normalize_scene()
 
-    Scale_path = os.path.join(args.output_folder, object_uid, "scale_offset_matrix.txt")
+    Scale_path = os.path.join(args.output_folder, "scale_offset_matrix.txt")
     np.savetxt(Scale_path, [scale] + list(offset) + [args.ortho_scale])
 
     try:
@@ -403,11 +410,11 @@ def save_images(object_file: str, viewidx: int) -> None:
         np.array([-radius, -radius, 0]) / np.sqrt(2.),  # camera front left
         np.array([radius, radius, 0]) / np.sqrt(2.),  # camera back right
         np.array([-radius, radius, 0]) / np.sqrt(2.),  # camera back left
-        np.array([0, 0, radius]),  # camera top
-        np.array([radius, -radius, radius]) / np.sqrt(3.),  # camera_front_right_top
-        np.array([-radius, -radius, radius]) / np.sqrt(3.),  # camera front left top
-        np.array([radius, radius, radius]) / np.sqrt(3.),  # camera back right top
-        np.array([-radius, radius, radius]) / np.sqrt(3.),  # camera back left top
+        # np.array([0, 0, radius]),  # camera top
+        # np.array([radius, -radius, radius]) / np.sqrt(3.),  # camera_front_right_top
+        # np.array([-radius, -radius, radius]) / np.sqrt(3.),  # camera front left top
+        # np.array([radius, radius, radius]) / np.sqrt(3.),  # camera back right top
+        # np.array([-radius, radius, radius]) / np.sqrt(3.),  # camera back left top
     ]
 
     for location in camera_locations:
@@ -444,7 +451,7 @@ def save_images(object_file: str, viewidx: int) -> None:
 
     bpy.ops.object.select_all(action='DESELECT')
 
-    VIEWS = VIEWS + EXTRA_VIEWS
+    # VIEWS = VIEWS + EXTRA_VIEWS
     for j in range(len(VIEWS)):
         view = f"{viewidx:03d}" + VIEWS[j]
         # set camera
@@ -461,129 +468,57 @@ def save_images(object_file: str, viewidx: int) -> None:
         RT = get_3x4_RT_matrix_from_blender(cam)
         # print(np.linalg.inv(cam_pose))  # the same
         # print(RT)
-        # idx = 4*i+j
-        RT_path = os.path.join(args.output_folder, object_uid, view + "_RT.txt")
-        K_path = os.path.join(args.output_folder, object_uid, view + "_K.txt")
-        # NT_path = os.path.join(args.output_folder, object_uid, f"{i:03d}_NT.npy")
-        K = get_calibration_matrix_K_from_blender()
+        RT_path = os.path.join(args.output_folder, view + "_RT.txt")
         np.savetxt(RT_path, RT)
-        # np.savetxt(K_path, K)
 
     # activate normal and depth rendering
     # must be here
     bproc.renderer.enable_normals_output()
     bproc.renderer.enable_depth_output(activate_antialiasing=False)
     # bproc.renderer.enable_distance_output(activate_antialiasing=True, antialiasing_distance_max=3)
+
     # Render the scene
     bproc.renderer.enable_diffuse_color_output()
     bproc.renderer.set_noise_threshold(0.01)
-    data = bproc.renderer.render()
+    bproc.renderer.set_light_bounces(diffuse_bounces=4, glossy_bounces=4, transmission_bounces=12,
+                                     transparent_max_bounces=8, volume_bounces=0)
 
-    for j in range(len(VIEWS)):
-        index = j
-
-        view = f"{viewidx:03d}" + VIEWS[j]
-
-        # Nomralizes depth maps
-        depth_map = data['depth'][index]
-
-        # dis_map = data['distance'][index]
-        # print("dis_max", np.max(dis_map))
-        # mask
-        # valid_mask = dis_map != np.max(dis_map)
-        # invalid_mask = dis_map == np.max(dis_map)
-        # # dis -> depth
-        # depth_map = PostProcessingUtility.dist2depth(dis_map)
-        # depth_map = dis_map
-
-        depth_max = np.max(depth_map)
-        valid_mask = depth_map != depth_max
-        invalid_mask = depth_map == depth_max
-        far = np.max(depth_map[valid_mask])
-        depth_map[invalid_mask] = far  # far_bound
-        # depth_map = np.uint16((depth_map / 10) * 65535)
-        valid_mask = valid_mask.astype(np.int8) * 255
-
-        depth_max = np.max(depth_map)
-        depth_min = np.min(depth_map)
-
-        depth_map = (depth_map - depth_min) / (depth_max - depth_min)
-        # depth_map = (depth_map - 1.5) / (2.7 - 1.5)
-        depth_map.clip(0, 1)
-
-        # add color
-        # depth_colored = colorize_depth_maps(
-        #     depth_map, 0, 1, cmap="Spectral"
-        # ).squeeze()
-        # depth_map = np.uint8(depth_colored * 255)
-        # depth_map = chw2hwc(depth_map)
-        # depth_map = np.concatenate([depth_map, valid_mask[:, :, None]], axis=-1)
-
-        # no add color
-        depth_map = np.uint8(depth_map * 255)
-        depth_map = cv2.cvtColor(depth_map, cv2.COLOR_GRAY2RGB)
-        depth_map = np.concatenate([depth_map, valid_mask[:, :, None]], axis=-1)
-
-        normal_map = data['normals'][index] * 255
-
-        # color_map = data['colors'][index]
-        color_map = data['diffuse'][index]
-        color_map = np.concatenate([color_map, valid_mask[:, :, None]], axis=-1)
-
-        normal_map = np.concatenate([normal_map, valid_mask[:, :, None]], axis=-1)
-
-        Image.fromarray(color_map.astype(np.uint8)).save(
-            '{}/{}/rgb_{}.png'.format(args.output_folder, object_uid, view))
-
-        Image.fromarray(normal_map.astype(np.uint8)).save(
-            '{}/{}/normals_{}.png'.format(args.output_folder, object_uid, view))
-
-        Image.fromarray(depth_map.astype(np.uint8)).save(
-            '{}/{}/depth_{}.png'.format(args.output_folder, object_uid, view))
-
-        # cv2.imwrite('{}/{}/rgb_{}.png'.format(args.output_folder, object_uid, view), color_map)
-        # cv2.imwrite('{}/{}/depth_{}.png'.format(args.output_folder,object_uid, view), depth_map)
-        # cv2.imwrite('{}/{}/normals_{}.png'.format(args.output_folder,object_uid, view), normal_map)
-        cv2.imwrite('{}/{}/mask_{}.png'.format(args.output_folder,object_uid, view), valid_mask)
-
-
-def download_object(object_url: str) -> str:
-    """Download the object and return the path."""
-    # uid = uuid.uuid4()
-    uid = object_url.split("/")[-1].split(".")[0]
-    tmp_local_path = os.path.join("tmp-objects", f"{uid}.glb" + ".tmp")
-    local_path = os.path.join("tmp-objects", f"{uid}.glb")
-    # wget the file and put it in local_path
-    os.makedirs(os.path.dirname(tmp_local_path), exist_ok=True)
-    urllib.request.urlretrieve(object_url, tmp_local_path)
-    os.rename(tmp_local_path, local_path)
-    # get the absolute path
-    local_path = os.path.abspath(local_path)
-    return local_path
+    # render model
+    # Manually set metallic to 1.0
+    bpy.data.materials["material0"].node_tree.nodes["Principled BSDF"].inputs[1].default_value = 1
+    bpy.data.objects['mesh_smplx'].hide_render = True
+    render_results_model = bproc.renderer.render()
+    dump_render_results(type='model', views=VIEWS, data=render_results_model, view_idx=viewidx)
+    # render smplx
+    bpy.data.objects[f'{obj_id}'].hide_render = True
+    bpy.data.objects['mesh_smplx'].hide_render = False
+    # for smplx normal smoothing
+    bpy.data.objects['mesh_smplx'].select_set(True)
+    bpy.ops.object.shade_smooth()
+    bpy.ops.object.select_all(action='DESELECT')
+    render_results_smplx = bproc.renderer.render()
+    dump_render_results(type='smplx', views=VIEWS, data=render_results_smplx, view_idx=viewidx)
 
 
 if __name__ == "__main__":
-    # try:
-    start_i = time.time()
-    if args.object_path.startswith("http"):
-        local_path = download_object(args.object_path)
-    else:
-        local_path = args.object_path
-
-    if not os.path.exists(local_path):
+    tic = time.time()
+    # render
+    if not os.path.exists(args.object_path):
         print("object does not exists")
     else:
         try:
-            save_images(local_path, args.view)
+            save_images(args.object_path, args.view)
         except Exception as e:
             print("Failed to render", args.object_path)
             print(e)
 
-    end_i = time.time()
-    print("Finished", local_path, "in", end_i - start_i, "seconds")
-    # delete the object if it was downloaded
-    if args.object_path.startswith("http"):
-        os.remove(local_path)
-    # except Exception as e:
-    #     print("Failed to render", args.object_path)
-    #     print(e)
+    toc = time.time()
+
+    print("Finished", args.object_path, "in", toc - tic, "seconds")
+
+"""
+blenderproc run --blender-install-path /home/pawting/blender render_thuman.py \
+    --object_path '/media/pawting/SN640/Datasets/THuman2/scans/0000/0000.obj' \
+     --ortho_scale 1.35 \
+     --resolution 512 \
+"""

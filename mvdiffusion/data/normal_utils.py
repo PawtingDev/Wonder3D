@@ -1,13 +1,15 @@
 import numpy as np
 
+
 def camNormal2worldNormal(rot_c2w, camNormal):
-    H,W,_ = camNormal.shape
-    normal_img = np.matmul(rot_c2w[None, :, :], camNormal.reshape(-1,3)[:, :, None]).reshape([H, W, 3])
+    H, W, _ = camNormal.shape
+    normal_img = np.matmul(rot_c2w[None, :, :], camNormal.reshape(-1, 3)[:, :, None]).reshape([H, W, 3])
 
     return normal_img
 
+
 def worldNormal2camNormal(rot_w2c, normal_map_world):
-    H,W,_ = normal_map_world.shape
+    H, W, _ = normal_map_world.shape
     # normal_img = np.matmul(rot_w2c[None, :, :], worldNormal.reshape(-1,3)[:, :, None]).reshape([H, W, 3])
 
     # faster version
@@ -22,24 +24,26 @@ def worldNormal2camNormal(rot_w2c, normal_map_world):
 
     return normal_map_camera
 
-def trans_normal(normal, RT_w2c, RT_w2c_target):
 
+def trans_normal(normal, RT_w2c, RT_w2c_target):
     # normal_world = camNormal2worldNormal(np.linalg.inv(RT_w2c[:3,:3]), normal)
     # normal_target_cam = worldNormal2camNormal(RT_w2c_target[:3,:3], normal_world)
 
-    relative_RT = np.matmul(RT_w2c_target[:3,:3], np.linalg.inv(RT_w2c[:3,:3]))
-    normal_target_cam = worldNormal2camNormal(relative_RT[:3,:3], normal)
+    relative_RT = np.matmul(RT_w2c_target[:3, :3], np.linalg.inv(RT_w2c[:3, :3]))
+    normal_target_cam = worldNormal2camNormal(relative_RT[:3, :3], normal)
 
     return normal_target_cam
 
+
 def img2normal(img):
-    return (img/255.)*2-1
+    return (img / 255.) * 2 - 1
+
 
 def normal2img(normal):
-    return np.uint8((normal*0.5+0.5)*255)
+    return np.uint8((normal * 0.5 + 0.5) * 255)
+
 
 def norm_normalize(normal, dim=-1):
-
-    normal = normal/(np.linalg.norm(normal, axis=dim, keepdims=True)+1e-6)
+    normal = normal / (np.linalg.norm(normal, axis=dim, keepdims=True) + 1e-6)
 
     return normal

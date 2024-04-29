@@ -169,7 +169,7 @@ class OrthoNeuSSystem(BaseSystem):
                                     type='mean')    
         
         self.log('train/loss_normal', loss_normal, prog_bar=True, rank_zero_only=True)
-        # loss += loss_normal * self.C(self.config.system.loss.lambda_normal)
+        loss += loss_normal * self.C(self.config.system.loss.lambda_normal)
 
         loss_eikonal = ((torch.linalg.norm(out['sdf_grad_samples'], ord=2, dim=-1) - 1.)**2).mean()
         self.log('train/loss_eikonal', loss_eikonal, prog_bar=True, rank_zero_only=True)

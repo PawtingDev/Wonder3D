@@ -3,10 +3,6 @@ import blenderproc as bproc
 import argparse, sys, os, math, re
 import bpy
 from glob import glob
-
-import matplotlib
-from blenderproc.python.postprocessing import PostProcessingUtility
-
 from mathutils import Vector, Matrix
 import random
 import sys
@@ -236,63 +232,14 @@ def reset_scene() -> None:
         bpy.data.images.remove(image, do_unlink=True)
 
 
-def colorize_depth_maps(
-        depth_map, min_depth, max_depth, cmap="Spectral", valid_mask=None
-):
-    """
-    Colorize depth maps.
-    """
-    assert len(depth_map.shape) >= 2, "Invalid dimension"
-
-    if isinstance(depth_map, np.ndarray):
-        depth = depth_map.copy().squeeze()
-    # reshape to [ (B,) H, W ]
-    if depth.ndim < 3:
-        depth = depth[np.newaxis, :, :]
-
-    # colorize
-    cm = matplotlib.colormaps[cmap]
-    depth = ((depth - min_depth) / (max_depth - min_depth)).clip(0, 1)
-    img_colored_np = cm(depth, bytes=False)[:, :, :, 0:3]  # value from 0 to 1
-    img_colored_np = np.rollaxis(img_colored_np, 3, 1)
-
-    if valid_mask is not None:
-        if valid_mask.ndim < 3:
-            valid_mask = valid_mask[np.newaxis, np.newaxis, :, :]
-        else:
-            valid_mask = valid_mask[:, np.newaxis, :, :]
-        valid_mask = np.repeat(valid_mask, 3, axis=1)
-        img_colored_np[~valid_mask] = 0
-
-    if isinstance(depth_map, np.ndarray):
-        img_colored = img_colored_np
-
-    return img_colored
-
-
-def chw2hwc(chw):
-    assert 3 == len(chw.shape)
-    if isinstance(chw, np.ndarray):
-        hwc = np.moveaxis(chw, 0, -1)
-    return hwc
-def add_lighting() -> None:
-    # add a new light
-    bpy.ops.object.light_add(type="AREA")
-    light2 = bpy.data.lights["Area"]
-    light2.energy = 70000
-    bpy.data.objects["Area"].location[2] = 0.5
-    bpy.data.objects["Area"].scale[0] = 100
-    bpy.data.objects["Area"].scale[1] = 100
-    bpy.data.objects["Area"].scale[2] = 100
-
 bproc.init()
 
 world_tree = bpy.context.scene.world.node_tree
 back_node = world_tree.nodes['Background']
-# env_light = 0.5
-env_light = 0.
+env_light = 0.4
+# env_light = 1.0
 back_node.inputs['Color'].default_value = Vector([env_light, env_light, env_light, 1.0])
-# back_node.inputs['Strength'].default_value = 1.0  # 0.5
+back_node.inputs['Strength'].default_value = 0.5
 
 # Place camera
 
@@ -308,40 +255,41 @@ print("ortho scale ", args.ortho_scale)
 # cam_constraint.up_axis = 'UP_Y'
 
 
-# # Make light just directional, disable shadows.
-# light = bproc.types.Light(name='Light', light_type='SUN')
-# light = bpy.data.lights['Light']
-# light.use_shadow = False
-# # Possibly disable specular shading:
-# light.specular_factor = 1.0
-# light.energy = 5.0
+# Make light just directional, disable shadows.
+light = bproc.types.Light(name='Light', light_type='SUN')
+light = bpy.data.lights['Light']
+light.use_shadow = False
+# Possibly disable specular shading:
+light.specular_factor = 1.0
+light.energy = 5.0
 
-# # Add another light source so stuff facing away from light is not completely dark
-# light2 = bproc.types.Light(name='Light2', light_type='SUN')
-# light2 = bpy.data.lights['Light2']
-# light2.use_shadow = False
-# light2.specular_factor = 1.0
-# light2.energy = 3  # 0.015
-# bpy.data.objects['Light2'].rotation_euler = bpy.data.objects['Light'].rotation_euler
-# bpy.data.objects['Light2'].rotation_euler[0] += 180
+# Add another light source so stuff facing away from light is not completely dark
+light2 = bproc.types.Light(name='Light2', light_type='SUN')
+light2 = bpy.data.lights['Light2']
+light2.use_shadow = False
+light2.specular_factor = 1.0
+light2.energy = 3  # 0.015
+bpy.data.objects['Light2'].rotation_euler = bpy.data.objects['Light'].rotation_euler
+bpy.data.objects['Light2'].rotation_euler[0] += 180
 
-# # Add another light source so stuff facing away from light is not completely dark
-# light3 = bproc.types.Light(name='light3', light_type='SUN')
-# light3 = bpy.data.lights['light3']
-# light3.use_shadow = False
-# light3.specular_factor = 1.0
-# light3.energy = 3  # 0.015
-# bpy.data.objects['light3'].rotation_euler = bpy.data.objects['Light'].rotation_euler
-# bpy.data.objects['light3'].rotation_euler[0] += 90
+# Add another light source so stuff facing away from light is not completely dark
+light3 = bproc.types.Light(name='light3', light_type='SUN')
+light3 = bpy.data.lights['light3']
+light3.use_shadow = False
+light3.specular_factor = 1.0
+light3.energy = 3  # 0.015
+bpy.data.objects['light3'].rotation_euler = bpy.data.objects['Light'].rotation_euler
+bpy.data.objects['light3'].rotation_euler[0] += 90
 
-# # Add another light source so stuff facing away from light is not completely dark
-# light4 = bproc.types.Light(name='light4', light_type='SUN')
-# light4 = bpy.data.lights['light4']
-# light4.use_shadow = False
-# light4.specular_factor = 1.0
-# light4.energy = 3  # 0.015
-# bpy.data.objects['light4'].rotation_euler = bpy.data.objects['Light'].rotation_euler
-# bpy.data.objects['light4'].rotation_euler[0] += -90
+# Add another light source so stuff facing away from light is not completely dark
+light4 = bproc.types.Light(name='light4', light_type='SUN')
+light4 = bpy.data.lights['light4']
+light4.use_shadow = False
+light4.specular_factor = 1.0
+light4.energy = 3  # 0.015
+bpy.data.objects['light4'].rotation_euler = bpy.data.objects['Light'].rotation_euler
+bpy.data.objects['light4'].rotation_euler[0] += -90
+
 
 
 # Get all camera objects in the scene
@@ -473,10 +421,8 @@ def save_images(object_file: str, viewidx: int) -> None:
     # must be here
     bproc.renderer.enable_normals_output()
     bproc.renderer.enable_depth_output(activate_antialiasing=False)
-    # bproc.renderer.enable_distance_output(activate_antialiasing=True, antialiasing_distance_max=3)
+    # bproc.renderer.enable_distance_output(activate_antialiasing=False)
     # Render the scene
-    bproc.renderer.enable_diffuse_color_output()
-    bproc.renderer.set_noise_threshold(0.01)
     data = bproc.renderer.render()
 
     for j in range(len(VIEWS)):
@@ -487,47 +433,23 @@ def save_images(object_file: str, viewidx: int) -> None:
         # Nomralizes depth maps
         depth_map = data['depth'][index]
 
-        # dis_map = data['distance'][index]
-        # print("dis_max", np.max(dis_map))
-        # mask
-        # valid_mask = dis_map != np.max(dis_map)
-        # invalid_mask = dis_map == np.max(dis_map)
-        # # dis -> depth
-        # depth_map = PostProcessingUtility.dist2depth(dis_map)
-        # depth_map = dis_map
-
         depth_max = np.max(depth_map)
         valid_mask = depth_map != depth_max
         invalid_mask = depth_map == depth_max
-        far = np.max(depth_map[valid_mask])
-        depth_map[invalid_mask] = far  # far_bound
+        depth_map[invalid_mask] = 0
         # depth_map = np.uint16((depth_map / 10) * 65535)
-        valid_mask = valid_mask.astype(np.int8) * 255
 
         depth_max = np.max(depth_map)
         depth_min = np.min(depth_map)
-
         depth_map = (depth_map - depth_min) / (depth_max - depth_min)
-        # depth_map = (depth_map - 1.5) / (2.7 - 1.5)
         depth_map.clip(0, 1)
-
-        # add color
-        # depth_colored = colorize_depth_maps(
-        #     depth_map, 0, 1, cmap="Spectral"
-        # ).squeeze()
-        # depth_map = np.uint8(depth_colored * 255)
-        # depth_map = chw2hwc(depth_map)
-        # depth_map = np.concatenate([depth_map, valid_mask[:, :, None]], axis=-1)
-
-        # no add color
-        depth_map = np.uint8(depth_map * 255)
-        depth_map = cv2.cvtColor(depth_map, cv2.COLOR_GRAY2RGB)
-        depth_map = np.concatenate([depth_map, valid_mask[:, :, None]], axis=-1)
+        depth_map = np.uint16(depth_map * 255)
 
         normal_map = data['normals'][index] * 255
 
-        # color_map = data['colors'][index]
-        color_map = data['diffuse'][index]
+        valid_mask = valid_mask.astype(np.int8) * 255
+
+        color_map = data['colors'][index]
         color_map = np.concatenate([color_map, valid_mask[:, :, None]], axis=-1)
 
         normal_map = np.concatenate([normal_map, valid_mask[:, :, None]], axis=-1)
@@ -538,13 +460,13 @@ def save_images(object_file: str, viewidx: int) -> None:
         Image.fromarray(normal_map.astype(np.uint8)).save(
             '{}/{}/normals_{}.png'.format(args.output_folder, object_uid, view))
 
-        Image.fromarray(depth_map.astype(np.uint8)).save(
+        Image.fromarray(depth_map).save(
             '{}/{}/depth_{}.png'.format(args.output_folder, object_uid, view))
 
         # cv2.imwrite('{}/{}/rgb_{}.png'.format(args.output_folder, object_uid, view), color_map)
         # cv2.imwrite('{}/{}/depth_{}.png'.format(args.output_folder,object_uid, view), depth_map)
         # cv2.imwrite('{}/{}/normals_{}.png'.format(args.output_folder,object_uid, view), normal_map)
-        cv2.imwrite('{}/{}/mask_{}.png'.format(args.output_folder,object_uid, view), valid_mask)
+        # cv2.imwrite('{}/{}/mask_{}.png'.format(args.output_folder,object_uid, view), valid_mask)
 
 
 def download_object(object_url: str) -> str:

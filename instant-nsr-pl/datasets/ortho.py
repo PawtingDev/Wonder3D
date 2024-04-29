@@ -187,6 +187,7 @@ class OrthoDatasetBase():
         self.camera_params = self.config.camera_params  # [fx, fy, cx, cy]
         
         self.view_types = ['front', 'front_right', 'right', 'back', 'left', 'front_left']
+        # self.view_types = ['v_0', 'v_0', 'right', 'back', 'left', 'front_left']
 
         self.view_weights = torch.from_numpy(np.array(self.config.view_weights)).float().to(self.rank).view(-1)
         self.view_weights = self.view_weights.view(-1,1,1).repeat(1, self.h, self.w)

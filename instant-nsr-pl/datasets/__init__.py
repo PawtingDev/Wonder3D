@@ -1,6 +1,5 @@
 datasets = {}
 
-
 def register(name):
     def decorator(cls):
         datasets[name] = cls
@@ -9,8 +8,9 @@ def register(name):
 
 
 def make(name, config):
+    print(datasets)
     dataset = datasets[name](config)
     return dataset
 
 
-from . import blender, colmap, dtu, ortho
+from . import blender, colmap, dtu, ortho, ortho_extend

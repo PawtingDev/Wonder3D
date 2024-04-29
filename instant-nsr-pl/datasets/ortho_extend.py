@@ -214,11 +214,12 @@ class OrthoDatasetBase():
         self.camera_type = self.config.camera_type
         self.camera_params = self.config.camera_params  # [fx, fy, cx, cy]
 
-        self.view_types = ['front', 'front_right', 'right', 'back', 'left', 'front_left']
+        self.view_types = ['front', 'front_right', 'right', 'back_right', 'back', 'back_left', 'left', 'front_left']
         # self.view_types = ['v_0', 'v_0', 'right', 'back', 'left', 'front_left']
 
         # 各视角权重，设为1, 即均等
-        self.view_weights = torch.from_numpy(np.ones_like(self.view_types)).float().to(self.rank).view(-1)
+        print(np.ones_like(self.view_types))
+        self.view_weights = torch.from_numpy(np.ones(len(self.view_types))).float().to(self.rank).view(-1)
         self.view_weights = self.view_weights.view(-1, 1, 1).repeat(1, self.h, self.w)
 
         # 加载相机位姿文件
@@ -230,7 +231,7 @@ class OrthoDatasetBase():
         self.images_np, self.masks_np, self.normals_cam_np, self.normals_world_np, \
             self.pose_all_np, self.w2c_all_np, self.origins_np, self.directions_np, self.rgb_masks_np = load_per_prediction(
             self.data_dir, self.object_name, self.imSize, self.view_types,
-            self.load_color, self.cam_pose_dir, normal_system='front',
+            self.load_color, self.cam_pose_dir, normal_system='self',
             camera_type=self.camera_type, cam_params=self.camera_params)
 
         self.has_mask = True
@@ -276,7 +277,7 @@ class OrthoIterableDataset(IterableDataset, OrthoDatasetBase):
             yield {}
 
 
-@datasets.register('ortho-36')
+@datasets.register('ortho-extend')
 class OrthoExtendDataModule(pl.LightningDataModule):
     def __init__(self, config):
         super().__init__()
