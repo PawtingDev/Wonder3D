@@ -190,3 +190,4 @@ experiments/*
 ckpts/*
 neus/*
 instant-nsr-pl/exp/*
+render_codes/out_renderings
