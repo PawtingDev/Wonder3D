@@ -5,7 +5,7 @@ pretrained_unet_path: 'flamehaze1115/wonder3d-v1.0'
 #pretrained_unet_path: null
 revision: null
 train_dataset:
-  root_dir: '/media/pawting/SN640/Datasets/wonder3d_dev/thuman2/ortho135_res1024/'  # change to your path
+  root_dir: '/media/pawting/SN640/Datasets/wonder3d_dev/thuman2/ortho1_res1024_viewstep5/'  # change to your path
 #  object_list: './data_lists/lvis_uids_filter_by_vertex.json'
 #  invalid_list: './data_lists/lvis_invalid_uids_nineviews.json'
   num_views: 6
@@ -17,7 +17,7 @@ train_dataset:
   read_normal: true
   read_color: true
 validation_dataset:
-  root_dir: '/media/pawting/SN640/Datasets/wonder3d_dev/thuman2/ortho135_res1024/'  # change to your path
+  root_dir: '/media/pawting/SN640/Datasets/wonder3d_dev/thuman2/ortho1_res1024_viewstep5/'  # change to your path
 #  object_list: './data_lists/lvis_uids_filter_by_vertex.json'
 #  invalid_list: './data_lists/lvis_invalid_uids_nineviews.json'
   num_views: 6
@@ -29,7 +29,7 @@ validation_dataset:
   read_normal: true
   read_color: true
 validation_train_dataset:
-  root_dir: '/media/pawting/SN640/Datasets/wonder3d_dev/thuman2/ortho135_res1024/'  # change to your path
+  root_dir: '/media/pawting/SN640/Datasets/wonder3d_dev/thuman2/ortho1_res1024_viewstep5/'  # change to your path
 #  object_list: './data_lists/lvis_uids_filter_by_vertex.json'
 #  invalid_list: './data_lists/lvis_invalid_uids_nineviews.json'
   num_views: 6
@@ -38,12 +38,12 @@ validation_train_dataset:
   img_wh: [256, 256]
   validation: false
   num_validation_samples: 16
-  num_samples: 16
+  num_samples: 16 # if set, sample from training set instead of validation set
   read_normal: true
   read_color: true
 
 # output_dir: 'outputs/debug'
-output_dir: 'outputs/wonder3D-controlnet'
+output_dir: 'outputs/smplx_normal_control'
 seed: 42
 train_batch_size: 4 # original paper uses 32
 validation_batch_size: 2

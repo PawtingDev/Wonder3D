@@ -22,9 +22,9 @@ import PIL.Image
 from .normal_utils import trans_normal, normal2img, img2normal
 import pdb
 
-
 import cv2
 import numpy as np
+
 
 def add_margin(pil_img, color=0, size=256):
     width, height = pil_img.size
@@ -32,8 +32,9 @@ def add_margin(pil_img, color=0, size=256):
     result.paste(pil_img, ((size - width) // 2, (size - height) // 2))
     return result
 
+
 def scale_and_place_object(image, scale_factor):
-    assert np.shape(image)[-1]==4  # RGBA
+    assert np.shape(image)[-1] == 4  # RGBA
 
     # Extract the alpha channel (transparency) and the object (RGB channels)
     alpha_channel = image[:, :, 3]
@@ -52,7 +53,7 @@ def scale_and_place_object(image, scale_factor):
         size = height
         original_size = original_height
 
-    scale_factor = min(scale_factor, size / (original_size+0.0))
+    scale_factor = min(scale_factor, size / (original_size + 0.0))
 
     new_size = scale_factor * original_size
     scale_factor = new_size / size
@@ -68,7 +69,7 @@ def scale_and_place_object(image, scale_factor):
     paste_y = center_y - (new_height // 2)
 
     # Resize the object (RGB channels) to the new size
-    rescaled_object = cv2.resize(image[y:y+height, x:x+width], (new_width, new_height))
+    rescaled_object = cv2.resize(image[y:y + height, x:x + width], (new_width, new_height))
 
     # Create a new RGBA image with the resized image
     new_image = np.zeros((original_height, original_width, 4), dtype=np.uint8)
@@ -77,18 +78,19 @@ def scale_and_place_object(image, scale_factor):
 
     return new_image
 
+
 class SingleImageDataset(Dataset):
     def __init__(self,
-        root_dir: str,
-        num_views: int,
-        img_wh: Tuple[int, int],
-        bg_color: str,
-        crop_size: int = 224,
-        single_image: Optional[PIL.Image.Image] = None,
-        num_validation_samples: Optional[int] = None,
-        filepaths: Optional[list] = None,
-        cond_type: Optional[str] = None
-        ) -> None:
+                 root_dir: str,
+                 num_views: int,
+                 img_wh: Tuple[int, int],
+                 bg_color: str,
+                 crop_size: int = 224,
+                 single_image: Optional[PIL.Image.Image] = None,
+                 num_validation_samples: Optional[int] = None,
+                 filepaths: Optional[list] = None,
+                 cond_type: Optional[str] = None
+                 ) -> None:
         """Create a dataset from a folder of images.
         If you pass in a root directory it will be searched for images
         ending in ext (ext can be a list)
@@ -101,14 +103,14 @@ class SingleImageDataset(Dataset):
         self.cond_type = cond_type
 
         if self.num_views == 4:
-            self.view_types  = ['front', 'right', 'back', 'left']
+            self.view_types = ['front', 'right', 'back', 'left']
         elif self.num_views == 5:
-            self.view_types  = ['front', 'front_right', 'right', 'back', 'left']
+            self.view_types = ['front', 'front_right', 'right', 'back', 'left']
         elif self.num_views == 6:
-            self.view_types  = ['front', 'front_right', 'right', 'back', 'left', 'front_left']
-        
+            self.view_types = ['front', 'front_right', 'right', 'back', 'left', 'front_left']
+
         self.fix_cam_pose_dir = "./mvdiffusion/data/fixed_poses/nine_views"
-        
+
         self.fix_cam_poses = self.load_fixed_poses()  # world2cam matrix
 
         if single_image is None:
@@ -142,41 +144,40 @@ class SingleImageDataset(Dataset):
         self.all_images = self.all_images[:num_validation_samples]
         self.all_alphas = self.all_alphas[:num_validation_samples]
 
-
     def __len__(self):
         return len(self.all_images)
 
     def load_fixed_poses(self):
         poses = {}
         for face in self.view_types:
-            RT = np.loadtxt(os.path.join(self.fix_cam_pose_dir,'%03d_%s_RT.txt'%(0, face)))
+            RT = np.loadtxt(os.path.join(self.fix_cam_pose_dir, '%03d_%s_RT.txt' % (0, face)))
             poses[face] = RT
 
         return poses
-        
+
     def cartesian_to_spherical(self, xyz):
         ptsnew = np.hstack((xyz, np.zeros(xyz.shape)))
-        xy = xyz[:,0]**2 + xyz[:,1]**2
-        z = np.sqrt(xy + xyz[:,2]**2)
-        theta = np.arctan2(np.sqrt(xy), xyz[:,2]) # for elevation angle defined from Z-axis down
-        #ptsnew[:,4] = np.arctan2(xyz[:,2], np.sqrt(xy)) # for elevation angle defined from XY-plane up
-        azimuth = np.arctan2(xyz[:,1], xyz[:,0])
+        xy = xyz[:, 0] ** 2 + xyz[:, 1] ** 2
+        z = np.sqrt(xy + xyz[:, 2] ** 2)
+        theta = np.arctan2(np.sqrt(xy), xyz[:, 2])  # for elevation angle defined from Z-axis down
+        # ptsnew[:,4] = np.arctan2(xyz[:,2], np.sqrt(xy)) # for elevation angle defined from XY-plane up
+        azimuth = np.arctan2(xyz[:, 1], xyz[:, 0])
         return np.array([theta, azimuth, z])
 
     def get_T(self, target_RT, cond_RT):
         R, T = target_RT[:3, :3], target_RT[:, -1]
-        T_target = -R.T @ T # change to cam2world
+        T_target = -R.T @ T  # change to cam2world
 
         R, T = cond_RT[:3, :3], cond_RT[:, -1]
         T_cond = -R.T @ T
 
         theta_cond, azimuth_cond, z_cond = self.cartesian_to_spherical(T_cond[None, :])
         theta_target, azimuth_target, z_target = self.cartesian_to_spherical(T_target[None, :])
-        
+
         d_theta = theta_target - theta_cond
         d_azimuth = (azimuth_target - azimuth_cond) % (2 * math.pi)
         d_z = z_target - z_cond
-        
+
         # d_T = torch.tensor([d_theta.item(), math.sin(d_azimuth.item()), math.cos(d_azimuth.item()), d_z.item()])
         return d_theta, d_azimuth
 
@@ -194,8 +195,7 @@ class SingleImageDataset(Dataset):
         else:
             raise NotImplementedError
         return bg_color
-    
-    
+
     def load_image(self, img_path, bg_color, return_type='np', Imagefile=None):
         # pil always returns uint8
         if Imagefile is None:
@@ -204,7 +204,7 @@ class SingleImageDataset(Dataset):
             image_input = Imagefile
         image_size = self.img_wh[0]
 
-        if self.crop_size!=-1:
+        if self.crop_size != -1:
             alpha_np = np.asarray(image_input)[:, :, 3]
             coords = np.stack(np.nonzero(alpha_np), 1)[:, (1, 0)]
             min_x, min_y = np.min(coords, 0)
@@ -221,11 +221,11 @@ class SingleImageDataset(Dataset):
 
         # img = scale_and_place_object(img, self.scale_ratio)
         img = np.array(image_input)
-        img = img.astype(np.float32) / 255. # [0, 1]
-        assert img.shape[-1] == 4 # RGBA
+        img = img.astype(np.float32) / 255.  # [0, 1]
+        assert img.shape[-1] == 4  # RGBA
 
-        alpha = img[...,3:4]
-        img = img[...,:3] * alpha + bg_color * (1 - alpha)
+        alpha = img[..., 3:4]
+        img = img[..., :3] * alpha + bg_color * (1 - alpha)
 
         if return_type == "np":
             pass
@@ -234,19 +234,18 @@ class SingleImageDataset(Dataset):
             alpha = torch.from_numpy(alpha)
         else:
             raise NotImplementedError
-        
+
         return img, alpha
-    
 
     def __len__(self):
         return len(self.all_images)
 
     def __getitem__(self, index):
 
-        image = self.all_images[index%len(self.all_images)]
-        alpha = self.all_alphas[index%len(self.all_images)]
+        image = self.all_images[index % len(self.all_images)]
+        alpha = self.all_alphas[index % len(self.all_images)]
         if self.file_list is not None:
-            filename = self.file_list[index%len(self.all_images)].replace(".png", "")
+            filename = self.file_list[index % len(self.all_images)].replace(".png", "")
         else:
             filename = 'null'
 
@@ -258,12 +257,12 @@ class SingleImageDataset(Dataset):
         azimuths = []
 
         img_tensors_in = [
-            image.permute(2, 0, 1)
-        ] * self.num_views
+                             image.permute(2, 0, 1)
+                         ] * self.num_views
 
         alpha_tensors_in = [
-            alpha.permute(2, 0, 1)
-        ] * self.num_views
+                               alpha.permute(2, 0, 1)
+                           ] * self.num_views
 
         for view, tgt_w2c in zip(self.view_types, tgt_w2cs):
             # evelations, azimuths
@@ -271,21 +270,21 @@ class SingleImageDataset(Dataset):
             elevations.append(elevation)
             azimuths.append(azimuth)
 
-        img_tensors_in = torch.stack(img_tensors_in, dim=0).float() # (Nv, 3, H, W)
-        alpha_tensors_in = torch.stack(alpha_tensors_in, dim=0).float() # (Nv, 3, H, W)
+        img_tensors_in = torch.stack(img_tensors_in, dim=0).float()  # (Nv, 3, H, W)
+        alpha_tensors_in = torch.stack(alpha_tensors_in, dim=0).float()  # (Nv, 3, H, W)
 
         elevations = torch.as_tensor(elevations).float().squeeze(1)
         azimuths = torch.as_tensor(azimuths).float().squeeze(1)
         elevations_cond = torch.as_tensor([0] * self.num_views).float()
 
         normal_class = torch.tensor([1, 0]).float()
-        normal_task_embeddings = torch.stack([normal_class]*self.num_views, dim=0)  # (Nv, 2)
+        normal_task_embeddings = torch.stack([normal_class] * self.num_views, dim=0)  # (Nv, 2)
         color_class = torch.tensor([0, 1]).float()
-        color_task_embeddings = torch.stack([color_class]*self.num_views, dim=0)  # (Nv, 2)
+        color_task_embeddings = torch.stack([color_class] * self.num_views, dim=0)  # (Nv, 2)
 
-        camera_embeddings = torch.stack([elevations_cond, elevations, azimuths], dim=-1) # (Nv, 3)
+        camera_embeddings = torch.stack([elevations_cond, elevations, azimuths], dim=-1)  # (Nv, 3)
 
-        out =  {
+        out = {
             'elevations_cond': elevations_cond,
             'elevations_cond_deg': torch.rad2deg(elevations_cond),
             'elevations': elevations,
@@ -301,5 +300,3 @@ class SingleImageDataset(Dataset):
         }
 
         return out
-
-        

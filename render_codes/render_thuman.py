@@ -31,7 +31,6 @@ parser.add_argument('--output_folder', type=str, default='output', help='The pat
 parser.add_argument('--resolution', type=int, default=512, help='Resolution of the images.')
 parser.add_argument('--ortho_scale', type=float, default=1.25, help='ortho rendering usage; how large the object is')
 parser.add_argument('--random_pose', action='store_true', help='whether randomly rotate the poses to be rendered')
-parser.add_argument('--reset_object_euler', action='store_true', help='set object rotation euler to 0')
 
 args = parser.parse_args()
 
@@ -288,7 +287,7 @@ def dump_render_results(type, views, data, view_idx):
         depth_max = np.max(depth_map)
         depth_min = np.min(depth_map)
 
-        depth_map = (depth_map - depth_min) / (depth_max - depth_min)
+        depth_map = (depth_map - depth_min) / (depth_max - depth_min + 1e-5)
         # depth_map = (depth_map - 1.5) / (2.7 - 1.5)
         depth_map.clip(0, 1)
 
@@ -319,11 +318,13 @@ def dump_render_results(type, views, data, view_idx):
 
             Image.fromarray(normal_map.astype(np.uint8)).save('{}/normals_{}.png'.format(dump_dir_model, view))
             cv2.imwrite('{}/mask_{}.png'.format(dump_dir_model, view), valid_mask)
+            cv2.imwrite('{}/depth_{}.png'.format(dump_dir_model, view), depth_map)
         elif type == 'smplx':
             dump_dir_smplx = os.path.join(args.output_folder, 'smplx')
             os.makedirs(dump_dir_smplx, exist_ok=True)
             Image.fromarray(normal_map.astype(np.uint8)).save('{}/normals_{}.png'.format(dump_dir_smplx, view))
             cv2.imwrite('{}/mask_{}.png'.format(dump_dir_smplx, view), valid_mask)
+            cv2.imwrite('{}/depth_{}.png'.format(dump_dir_smplx, view), depth_map)
         #
         # Image.fromarray(depth_map.astype(np.uint8)).save('{}/depth_{}.png'.format(args.output_folder, view))
         #
@@ -334,22 +335,6 @@ def dump_render_results(type, views, data, view_idx):
 
 
 bproc.init()
-# 1. Rotate scan using smplx to face forward
-lst_object_path = args.object_path.split('/')
-obj_id = lst_object_path[-2]
-base_dir = '/'.join(lst_object_path[:-3])
-# smplx_dir = 'smplx'
-smplx_dir = 'Smpl-X_THU'
-
-smplx_path = os.path.join(base_dir, smplx_dir, obj_id, 'smplx_param.pkl')
-smplx_obj_file = os.path.join(base_dir, smplx_dir, obj_id, 'mesh_smplx.obj')
-# with open(smplx_path, 'rb') as f:
-#     smplx_para = np.load(f, allow_pickle=True)
-smplx_para = np.load(smplx_path, allow_pickle=True)
-
-y_orient = smplx_para['global_orient'][0][1]
-base_orient = (y_orient * 180.0 / np.pi)
-
 
 # Place camera
 bpy.data.cameras[0].type = "ORTHO"
@@ -368,6 +353,21 @@ def save_images(object_file: str, viewidx: int) -> None:
     # 1. init scene
     reset_scene()
 
+    # 2. Rotate scan using smplx to face forward
+    lst_object_path = args.object_path.split('/')
+    obj_id = lst_object_path[-2]
+    dataset_type = lst_object_path[-4]
+    base_dir = '/'.join(lst_object_path[:-3])
+    smplx_dir = 'smplx'
+
+    smplx_path = os.path.join(base_dir, smplx_dir, obj_id, 'smplx_param.pkl')
+    smplx_obj_file = os.path.join(base_dir, smplx_dir, obj_id, 'mesh_smplx.obj')
+    # with open(smplx_path, 'rb') as f:
+    #     smplx_para = np.load(f, allow_pickle=True)
+    smplx_para = np.load(smplx_path, allow_pickle=True)
+
+    y_orient = smplx_para['global_orient'][0][1]
+
     # load the object to bpy
     load_object(object_file)
     load_object(smplx_obj_file)
@@ -375,10 +375,19 @@ def save_images(object_file: str, viewidx: int) -> None:
     os.makedirs(args.output_folder, exist_ok=True)
 
     # if args.reset_object_euler:
-    if int(obj_id) > 525:
+    # if int(obj_id) > 525:
+    print(f"{dataset_type} -> {y_orient}rad")
+    if dataset_type == 'THuman2.1_Release':
         for obj in scene_root_objects():
             obj.rotation_euler[0] = 0  # don't know why
+            obj.rotation_euler[2] = -y_orient  # rotate Z
         bpy.ops.object.select_all(action="DESELECT")
+    elif dataset_type == 'THuman2':
+        for obj in scene_root_objects():
+            obj.rotation_euler[2] = -y_orient  # rotate Z
+        bpy.ops.object.select_all(action="DESELECT")
+    else:
+        raise NotImplementedError
 
     scale, offset = normalize_scene()
 
@@ -444,6 +453,8 @@ def save_images(object_file: str, viewidx: int) -> None:
         delta_z = 0
         delta_x = 0
         delta_y = 0
+
+    bpy.ops.transform.rotate(value=math.radians(viewidx), orient_axis='Z', orient_type='VIEW')
 
     bpy.ops.transform.rotate(value=math.radians(delta_z), orient_axis='Z', orient_type='VIEW')
     bpy.ops.transform.rotate(value=math.radians(delta_y), orient_axis='Y', orient_type='VIEW')
@@ -518,7 +529,23 @@ if __name__ == "__main__":
 
 """
 blenderproc run --blender-install-path /home/pawting/blender render_thuman.py \
-    --object_path '/media/pawting/SN640/Datasets/THuman2/scans/0000/0000.obj' \
+    --object_path '/media/pawting/SN640/Datasets/THuman2/model/0000/0000.obj' \
      --ortho_scale 1.35 \
      --resolution 512 \
+# face left
+blenderproc run --blender-install-path /home/pawting/blender render_thuman.py \
+    --object_path '/media/pawting/SN640/Datasets/THuman2/model/0006/0006.obj' \
+     --ortho_scale 0.4 \
+     --resolution 512 \
+     --thuman 2.0 \
+     --output_folder '/media/pawting/SN640/Datasets/wonder3d_dev/thuman2/debug' \
+     --view 30
+# THuman 2.1
+blenderproc run --blender-install-path /home/pawting/blender render_thuman.py \
+    --object_path '/media/pawting/SN640/Datasets/THuman2.1_Release/model/2444/2444.obj' \
+     --ortho_scale 1.0 \
+     --resolution 512 \
+     --thuman 2.1 \
+     --output_folder '/media/pawting/SN640/Datasets/wonder3d_dev/thuman2/debug' \
+     --view 0
 """

@@ -36,7 +36,7 @@ parser.add_argument('--end_i', type=int, default=-1,
                     help='the index of the last object to be rendered.')
 
 # dataset
-parser.add_argument('--dataset_type', type=str, default='thuman2',
+parser.add_argument('--dataset_type', type=str, default='thuman',
                     help='Dataset type to render.')
 parser.add_argument('--dataset_root', type=str, default='/ghome/l5/xxlong/.objaverse/hf-objaverse-v1',
                     help='Path to a json file containing a list of 3D object files.')
@@ -71,8 +71,8 @@ VIEWS = ["front", "back", "right", "left", "front_right", "front_left"]
 
 def is_obj_rendering_done(render_dir, view_index):
     types = {
-        'model': ['rgb', 'normals'],
-        'smplx': ['normals']
+        'model': ['rgb', 'normals', 'depth'],
+        'smplx': ['normals', 'depth']
     }
     # render_types = ['rgb', 'normals', 'depth']
     flag = True
@@ -168,31 +168,50 @@ if __name__ == "__main__":
             process.start()
 
     # Add items to the queue
-    if args.input_models_path is not None:
-        if args.dataset_type == "thuman2":
-            subjects = np.loadtxt(f"{args.input_models_path}", dtype=str)
-            # set thuman2.0 end_i max -> 525
-            args.end_i = len(subjects) if args.end_i > len(subjects) else args.end_i
+
+    if args.dataset_type == "thuman":
+        total_thuman = 2445
+        # subjects = np.loadtxt(f"{args.input_models_path}", dtype=str)
+        subjects = [f'{i:04}' for i in range(total_thuman)]
+        # set thuman2.0 end_i max -> 525
+        args.end_i = total_thuman if args.end_i >= total_thuman-1 else args.end_i
+        args.end_i = args.end_i+1 if args.end_i == args.start_i else args.end_i
+        if args.start_i <= 526 and args.end_i < 525+1:
+            dataset = 'THuman2'
             for subject in subjects[args.start_i:args.end_i]:
-                obj_path = os.path.join(args.dataset_root, "model", f'{subject}/{subject}.obj')
+                obj_path = os.path.join(args.dataset_root, dataset, "model", f'{subject}/{subject}.obj')
+                queue.put(obj_path)
+        elif args.start_i > 525:
+            dataset = 'THuman2.1_Release'
+            for subject in subjects[args.start_i:args.end_i]:
+                obj_path = os.path.join(args.dataset_root, dataset, "model", f'{subject}/{subject}.obj')
+                queue.put(obj_path)
+        else:
+            dataset = ['THuman2', 'THuman2.1_Release']
+            for subject in subjects[args.start_i:526]:
+                obj_path = os.path.join(args.dataset_root, dataset[0], "model", f'{subject}/{subject}.obj')
+                queue.put(obj_path)
+            for subject in subjects[526:args.end_i]:
+                obj_path = os.path.join(args.dataset_root, dataset[1], "model", f'{subject}/{subject}.obj')
                 queue.put(obj_path)
 
-        elif args.dataset_type == "objverse":
-            with open(args.input_models_path, "r") as f:
-                model_paths = json.load(f)
 
-            args.end_i = len(model_paths) if args.end_i > len(model_paths) else args.end_i
+    elif args.dataset_type == "objverse":
+        with open(args.input_models_path, "r") as f:
+            model_paths = json.load(f)
 
-            for item in model_paths[args.start_i:args.end_i]:
-                # if os.path.exists(os.path.join(args.objaverse_root, os.path.basename(item))):
-                #     obj_path = os.path.join(args.objaverse_root, os.path.basename(item))
-                # elif os.path.exists(os.path.join(args.objaverse_root, item)):
-                #     obj_path = os.path.join(args.objaverse_root, item)
-                # else:
-                #     obj_path = os.path.join(args.objaverse_root, item[:2], item+".glb")
+        args.end_i = len(model_paths) if args.end_i > len(model_paths) else args.end_i
 
-                obj_path = os.path.join(args.objaverse_root, objaverse._load_object_paths()[item])
-                queue.put(obj_path)
+        for item in model_paths[args.start_i:args.end_i]:
+            # if os.path.exists(os.path.join(args.objaverse_root, os.path.basename(item))):
+            #     obj_path = os.path.join(args.objaverse_root, os.path.basename(item))
+            # elif os.path.exists(os.path.join(args.objaverse_root, item)):
+            #     obj_path = os.path.join(args.objaverse_root, item)
+            # else:
+            #     obj_path = os.path.join(args.objaverse_root, item[:2], item+".glb")
+
+            obj_path = os.path.join(args.objaverse_root, objaverse._load_object_paths()[item])
+            queue.put(obj_path)
 
     # Wait for all tasks to be completed
     queue.join()

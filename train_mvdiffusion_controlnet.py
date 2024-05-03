@@ -119,6 +119,7 @@ class TrainingConfig:
     # for controlnet
     controlnet_model_name_or_path: Optional[str]
 
+
 def log_validation(dataloader, vae, feature_extractor, image_encoder, unet, cfg: TrainingConfig, accelerator,
                    weight_dtype, global_step, name, save_dir, controlnet):
     logger.info(f"Running {name} ... ")
@@ -181,7 +182,8 @@ def log_validation(dataloader, vae, feature_extractor, image_encoder, unet, cfg:
             # B*Nv images
             for guidance_scale in cfg.validation_guidance_scales:
                 out = pipeline(
-                    imgs_in, camera_task_embeddings, control_img=normals_ctrl, generator=generator, guidance_scale=guidance_scale,
+                    imgs_in, camera_task_embeddings, control_img=normals_ctrl, generator=generator,
+                    guidance_scale=guidance_scale,
                     output_type='pt', num_images_per_prompt=1, **cfg.pipe_validation_kwargs
                 ).images  # BxNv C H W
                 # num_images = out.shape[0]  # BxNv
@@ -485,10 +487,19 @@ def main(
         num_training_steps=cfg.max_train_steps * accelerator.num_processes,
     )
 
+    cam_rot_left_input_angle = [0, 15, 30]
+    cam_rot_right_input_angle = [330, 345]
+    view_sets = cam_rot_left_input_angle + cam_rot_right_input_angle
     # Get the training dataset
-    train_dataset = MVDiffusionDataset(
-        **cfg.train_dataset
-    )
+    training_datasets = []
+    for i in range(len(view_sets)):
+        train_dataset = MVDiffusionDataset(
+            view_set=view_sets[i],  # augmentation of input view
+            **cfg.train_dataset,
+        )
+        training_datasets.append(train_dataset)
+    train_dataset = torch.utils.data.ConcatDataset(training_datasets)
+    # no augmentation for validation dataset
     validation_dataset = MVDiffusionDataset(
         **cfg.validation_dataset
     )
@@ -825,7 +836,6 @@ def main(
                 train_loss = 0.0
                 if accelerator.is_main_process:
                     if global_step % cfg.checkpointing_steps == 0:
-
                         save_path = os.path.join(cfg.output_dir, f"checkpoint-{global_step}")
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")

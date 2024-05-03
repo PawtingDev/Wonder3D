@@ -28,8 +28,8 @@ from diffusers.models.modeling_utils import ModelMixin
 from diffusers.models.unet_2d_blocks import (
     CrossAttnDownBlock2D,
     DownBlock2D,
-    UNetMidBlock2DCrossAttn,
-    get_down_block,
+    # UNetMidBlock2DCrossAttn,
+    # get_down_block,
 )
 # MV diffusion blocks
 from mvdiffusion.models.unet_mv2d_blocks import (

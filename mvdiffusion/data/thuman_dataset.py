@@ -42,7 +42,8 @@ class ObjaverseDataset(Dataset):
                  mix_color_normal: bool = False,
                  suffix: str = 'png',
                  subscene_tag: int = 3,
-                 backup_scene: str = "0033"
+                 backup_scene: str = "0033",
+                 view_set: int = 0
                  ) -> None:
         """Create a dataset from a folder of images.
         If you pass in a root directory it will be searched for images
@@ -69,6 +70,8 @@ class ObjaverseDataset(Dataset):
 
         self.view_types = ['front', 'front_right', 'right', 'back', 'left', 'front_left']
         self.fix_cam_pose_dir = "./mvdiffusion/data/fixed_poses/nine_views"
+        # default to front view input
+        self.view_set = view_set
 
         self.fix_cam_poses = self.load_fixed_poses()  # world2cam matrix
 
@@ -78,10 +81,12 @@ class ObjaverseDataset(Dataset):
         # for subject in subjects:
         #     self.all_objects.append(subject)
 
-        self.all_objects = [name for name in os.listdir(self.root_dir) if os.path.isdir(os.path.join(self.root_dir, name))]
+        self.all_objects = [name for name in os.listdir(self.root_dir) if
+                            os.path.isdir(os.path.join(self.root_dir, name))]
+        self.all_objects = sorted(self.all_objects)
 
         if not validation:
-            self.all_objects = self.all_objects[:-num_validation_samples]
+            self.all_objects = self.all_objects[:-num_validation_samples]  # training set
         else:
             self.all_objects = self.all_objects[-num_validation_samples:]
         if num_samples is not None:
@@ -97,7 +102,7 @@ class ObjaverseDataset(Dataset):
     def load_fixed_poses(self):
         poses = {}
         for view in self.view_types:
-            RT = np.loadtxt(os.path.join(self.fix_cam_pose_dir, '%03d_%s_RT.txt' % (0, view)))
+            RT = np.loadtxt(os.path.join(self.fix_cam_pose_dir, f'{0:03d}_{view}_RT.txt'))
             poses[view] = RT
 
         return poses
@@ -311,8 +316,10 @@ class ObjaverseDataset(Dataset):
         for view, tgt_w2c in zip(view_types, tgt_w2cs):
             img_path = os.path.join(self.root_dir, f"{object_name}/model", f"rgb_{set_idx:03d}_{view}.{self.suffix}")
             mask_path = os.path.join(self.root_dir, f"{object_name}/model", f"mask_{set_idx:03d}_{view}.{self.suffix}")
-            normal_path = os.path.join(self.root_dir, f"{object_name}/model", f"normal_{set_idx:03d}_{view}.{self.suffix}")
-            depth_path = os.path.join(self.root_dir, f"{object_name}/model", f"depth_{set_idx:03d}_{view}.{self.suffix}")
+            normal_path = os.path.join(self.root_dir, f"{object_name}/model",
+                                       f"normal_{set_idx:03d}_{view}.{self.suffix}")
+            depth_path = os.path.join(self.root_dir, f"{object_name}/model",
+                                      f"depth_{set_idx:03d}_{view}.{self.suffix}")
 
             if self.read_mask:
                 alpha = self.load_mask(mask_path, return_type='np')
@@ -375,6 +382,7 @@ class ObjaverseDataset(Dataset):
         else:
             object_name = self.all_objects[index % len(self.all_objects)]
             set_idx = 0
+        set_idx = self.view_set
 
         if self.augment_data:
             cond_view = random.sample(self.view_types, k=1)[0]
@@ -413,10 +421,13 @@ class ObjaverseDataset(Dataset):
         for view, tgt_w2c in zip(view_types, tgt_w2cs):
             img_path = os.path.join(self.root_dir, f"{object_name}/model", f"rgb_{set_idx:03d}_{view}.{self.suffix}")
             mask_path = os.path.join(self.root_dir, f"{object_name}/model", f"mask_{set_idx:03d}_{view}.{self.suffix}")
-            normal_path = os.path.join(self.root_dir, f"{object_name}/model", f"normals_{set_idx:03d}_{view}.{self.suffix}")
-            depth_path = os.path.join(self.root_dir, f"{object_name}/model", f"depth_{set_idx:03d}_{view}.{self.suffix}")
+            normal_path = os.path.join(self.root_dir, f"{object_name}/model",
+                                       f"normals_{set_idx:03d}_{view}.{self.suffix}")
+            depth_path = os.path.join(self.root_dir, f"{object_name}/model",
+                                      f"depth_{set_idx:03d}_{view}.{self.suffix}")
 
-            normal_smplx_path = os.path.join(self.root_dir, f"{object_name}/smplx/normals_{set_idx:03d}_{view}.{self.suffix}")
+            normal_smplx_path = os.path.join(self.root_dir,
+                                             f"{object_name}/smplx/normals_{set_idx:03d}_{view}.{self.suffix}")
 
             if self.read_mask:
                 alpha = self.load_mask(mask_path, return_type='np')
@@ -475,7 +486,8 @@ class ObjaverseDataset(Dataset):
             'camera_embeddings': camera_embeddings,
             'normal_task_embeddings': normal_task_embeddings,
             'color_task_embeddings': color_task_embeddings,
-            'normals_smplx': normal_tensors_out_smplx
+            'normals_smplx': normal_tensors_out_smplx,
+            'subject_id': object_name
         }
 
     def __getitem__(self, index):
@@ -507,7 +519,8 @@ class ConcatDataset(torch.utils.data.Dataset):
 if __name__ == "__main__":
 
     train_dataset = ObjaverseDataset(
-        root_dir="/media/pawting/SN640/Datasets/wonder3d_dev/thuman2/ortho135_res1024",
+        # root_dir="/media/pawting/SN640/Datasets/wonder3d_dev/thuman2/ortho135_res1024",
+        root_dir="/media/pawting/SN640/Datasets/wonder3d_dev/thuman2/ortho1_res1024_viewstep5",
         num_views=6,
         bg_color="white",
         img_wh=(256, 256),
@@ -516,19 +529,20 @@ if __name__ == "__main__":
         read_mask=False,
         read_depth=False,
         # mix_color_normal=True
-        mix_color_normal=False
+        mix_color_normal=False,
+        view_set=30
     )
 
-    data_0 = train_dataset[33]
+    data_0 = train_dataset[0]
     for k, v in data_0.items():
         print(k, v.shape)
 
     # img_out = rearrange(np.asarray(data_0["imgs_out"][0]), "c h w -> h w c")
     # normals_smplx = rearrange(np.asarray(data_0["normals_smplx"][0]), "c h w -> h w c")
     for view in range(6):
-        cv2.imwrite(f"/media/pawting/SN640/hello_worlds/Wonder3D/img_out_{view}.jpg",
+        cv2.imwrite(f"/media/pawting/SN640/hello_worlds/Wonder3D/outputs/img_out_{view}_.jpg",
                     rearrange(np.asarray(data_0["normals_smplx"][view]), "c h w -> h w c") * 255)
-    # print(data_0["imgs_out"].size())
+    print(data_0["imgs_out"].size())
     # print(data_0["imgs_out"])
     # print(data_0["imgs_in"])
 
@@ -552,7 +566,7 @@ shape(num_views, 3, h, w)
         # 每次组成一组多视角normal或color
         shape(num_views, 3, h, w)
     # joint mode
-        shape(0)
+        shape(num_views, 3, h, w)
         
 # normal_out
 # joint mode only
